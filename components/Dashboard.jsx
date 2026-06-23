@@ -23,6 +23,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState(null);
   const [me, setMe] = useState(null);
+  const [myEmail, setMyEmail] = useState('');
   const [settings, setSettings] = useState(api.DEFAULT_SETTINGS);
   const [members, setMembers] = useState([]);
   const [plans, setPlans] = useState([]);
@@ -66,6 +67,7 @@ export default function Dashboard() {
         const r = sess?.profile?.role || 'member';
         setRole(r);
         setMe(sess?.member || null);
+        setMyEmail(sess?.profile?.email || '');
         await loadAll();
         setView(r === 'owner' ? 'dashboard' : 'mydash');
       } catch (e) {
@@ -106,6 +108,13 @@ export default function Dashboard() {
     <div className={`stat ${cls}`}><div className="s-ic">{ic}</div><div className="s-val">{val}</div><div className="s-lbl">{lbl}</div></div>
   );
   const Empty = ({ ic, h, p }) => <div className="empty"><div className="e-ic">{ic}</div><h3>{h}</h3><p>{p}</p></div>;
+  const NotLinked = () => (
+    <div className="panel"><div className="empty"><div className="e-ic">🙋</div>
+      <h3>No membership linked to this account</h3>
+      <p>You're signed in as <b style={{ color: 'var(--accent-2)' }}>{myEmail || 'this account'}</b>.<br />
+        Ask the gym to add you as a member using <b>exactly this email</b>, then refresh this page.</p>
+    </div></div>
+  );
 
   const OWNER_NAV = [['dashboard', '📊', 'Dashboard'], ['members', '🧑‍🤝‍🧑', 'Members'], ['attendance', '📋', 'Attendance'],
     ['plans', '🏷️', 'Plans'], ['gallery', '🖼️', 'Gym Gallery'], ['reminders', '🔔', 'Reminders'], ['settings', '⚙️', 'Settings']];
@@ -696,7 +705,7 @@ export default function Dashboard() {
   /* ---------- member self-service ---------- */
   function myDash() {
     const m = curMember;
-    if (!m) return <div className="panel"><Empty ic="🙋" h="No membership linked yet" p="Ask the gym to register your email/phone, then sign in again." /></div>;
+    if (!m) return <NotLinked />;
     const s = statusOf(m), dl = daysLeft(m);
     const total = m.start_date ? daysBetween(m.start_date, m.end_date) : 0;
     const used = m.start_date ? Math.min(total, Math.max(0, daysBetween(m.start_date, todayISO()))) : 0;
@@ -746,7 +755,7 @@ export default function Dashboard() {
 
   function myAttendance() {
     const m = curMember;
-    if (!m) return <div className="panel"><Empty ic="🙋" h="No membership linked" p="Ask the gym to register you." /></div>;
+    if (!m) return <NotLinked />;
     const mine = [...attendance.filter((a) => a.member_id === m.id)];
     const streak = (() => { const set = new Set(mine.map((r) => r.date)); let n = 0; const d = new Date(); while (set.has(d.toISOString().slice(0, 10))) { n++; d.setDate(d.getDate() - 1); } return n; })();
     return (
@@ -767,7 +776,7 @@ export default function Dashboard() {
 
   function myProfile() {
     const m = curMember;
-    if (!m) return <div className="panel"><Empty ic="🙋" h="No membership linked" p="Ask the gym to register you." /></div>;
+    if (!m) return <NotLinked />;
     const age = m.dob ? Math.floor(daysBetween(m.dob, todayISO()) / 365.25) + ' yrs' : '—';
     const dl = daysLeft(m);
     const s = statusOf(m);
