@@ -393,6 +393,41 @@ export default function Dashboard() {
     catch (err) { toast(err.message, 'err'); }
   }
 
+  /* ---------- account: change password / email ---------- */
+  function openChangePassword() {
+    setModal({
+      title: 'Change Password', node: (
+        <form onSubmit={async (e) => {
+          e.preventDefault(); const f = e.target;
+          if (f.np.value !== f.cp.value) return toast('Passwords do not match', 'err');
+          try { await api.updatePassword(f.np.value); closeModal(); toast('Password changed ✔ Use it next time you log in.', 'ok'); }
+          catch (err) { toast(err.message, 'err'); }
+        }}>
+          <div className="field"><label>New Password</label><input type="password" name="np" minLength={6} placeholder="min 6 characters" required /></div>
+          <div className="field" style={{ marginTop: 12 }}><label>Confirm New Password</label><input type="password" name="cp" required /></div>
+          <div className="modal-foot"><button type="button" className="btn btn-ghost" onClick={closeModal}>Cancel</button>
+            <button type="submit" className="btn btn-primary">Update Password</button></div>
+        </form>
+      ),
+    });
+  }
+  function openChangeEmail() {
+    setModal({
+      title: 'Change Login Email', node: (
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          try { await api.updateEmail(e.target.em.value.trim()); closeModal(); toast('Email update requested ✔ Check the new inbox for a confirmation link if asked.', 'ok'); }
+          catch (err) { toast(err.message, 'err'); }
+        }}>
+          <p className="muted" style={{ marginBottom: 12 }}>Currently signed in as <b style={{ color: 'var(--txt)' }}>{myEmail || '—'}</b></p>
+          <div className="field"><label>New Email</label><input type="email" name="em" placeholder="new@email.com" required /></div>
+          <div className="modal-foot"><button type="button" className="btn btn-ghost" onClick={closeModal}>Cancel</button>
+            <button type="submit" className="btn btn-primary">Update Email</button></div>
+        </form>
+      ),
+    });
+  }
+
   /* ===================== VIEWS ===================== */
   function renderView() {
     switch (view) {
@@ -695,8 +730,11 @@ export default function Dashboard() {
         </div>
         <div className="panel" style={{ maxWidth: 760 }}>
           <div className="panel-head"><h2>👑 Owner Account</h2></div>
-          <div className="detail-list">{di('Role', 'Gym Owner 👑')}{di('Signed in', 'Authenticated via Supabase')}</div>
-          <p className="muted" style={{ marginTop: 12, fontSize: 13 }}>Manage login methods & passwords in your Supabase Auth dashboard. Use Logout (sidebar) to switch accounts.</p>
+          <div className="detail-list">{di('Role', 'Gym Owner 👑')}{di('Login Email', myEmail || '—')}</div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+            <button className="btn btn-ghost btn-sm" onClick={openChangeEmail}>✉️ Change Email</button>
+            <button className="btn btn-ghost btn-sm" onClick={openChangePassword}>🔑 Change Password</button>
+          </div>
         </div>
       </>
     );
@@ -820,7 +858,11 @@ export default function Dashboard() {
             {di('Age', age)}{di('Date of Birth', fmtDate(m.dob))}
             {di('Address', m.address || '—')}{di('Emergency Contact', m.emergency || '—')}
           </div>
-          <p className="muted" style={{ marginTop: 16, fontSize: 13 }}>To update your details, contact the gym front desk.</p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>
+            <button className="btn btn-ghost btn-sm" onClick={openChangePassword}>🔑 Change Password</button>
+            <button className="btn btn-ghost btn-sm" onClick={openChangeEmail}>✉️ Change Login Email</button>
+          </div>
+          <p className="muted" style={{ marginTop: 14, fontSize: 13 }}>To update your name, phone or plan, contact the gym front desk.</p>
         </div>
       </div>
     );
