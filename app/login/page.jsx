@@ -1,10 +1,8 @@
 'use client';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { sb } from '@/lib/supabase/client';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [method, setMethod] = useState('password'); // 'password' | 'email' | 'phone'
   const [signup, setSignup] = useState(false);
   const [stage, setStage] = useState('enter'); // for OTP: 'enter' | 'otp'
@@ -15,7 +13,8 @@ export default function LoginPage() {
   const [msg, setMsg] = useState(null);
 
   const note = (text, type = 'err') => setMsg({ text, type });
-  const done = () => { router.replace('/'); router.refresh(); };
+  // Full page load so the server immediately sees the new auth cookie (avoids bounce-back to login).
+  const done = () => { window.location.assign('/'); };
 
   /* ---- password (most reliable) ---- */
   async function submitPassword(e) {
