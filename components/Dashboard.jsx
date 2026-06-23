@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import * as api from '@/lib/api';
+import { loadRazorpay } from '@/lib/pay';
 
 /* ---------------- helpers ---------------- */
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -29,6 +30,7 @@ export default function Dashboard() {
   const [plans, setPlans] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [gallery, setGallery] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [view, setView] = useState('dashboard');
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -59,6 +61,7 @@ export default function Dashboard() {
     ]);
     setSettings(se); setPlans(pl); setAttendance(at); setGallery(ga);
     try { setMembers(await api.getMembers()); } catch { setMembers([]); }
+    try { setPayments(await api.getPayments()); } catch { setPayments([]); }
   }
   useEffect(() => {
     (async () => {
@@ -117,12 +120,13 @@ export default function Dashboard() {
   );
 
   const OWNER_NAV = [['dashboard', '📊', 'Dashboard'], ['members', '🧑‍🤝‍🧑', 'Members'], ['attendance', '📋', 'Attendance'],
-    ['plans', '🏷️', 'Plans'], ['gallery', '🖼️', 'Gym Gallery'], ['reminders', '🔔', 'Reminders'], ['settings', '⚙️', 'Settings']];
+    ['plans', '🏷️', 'Plans'], ['gallery', '🖼️', 'Gym Gallery'], ['reminders', '🔔', 'Reminders'],
+    ['payments', '💳', 'Payments'], ['settings', '⚙️', 'Settings']];
   const MEMBER_NAV = [['mydash', '🏠', 'My Dashboard'], ['myattendance', '📋', 'My Attendance'],
     ['plans', '🏷️', 'Plans'], ['gallery', '🖼️', 'Gym Gallery'], ['myprofile', '👤', 'My Profile']];
   const NAV = role === 'owner' ? OWNER_NAV : MEMBER_NAV;
   const TITLES = { dashboard: 'Dashboard', members: 'Members', attendance: 'Attendance', plans: 'Membership Plans',
-    gallery: 'Gym Gallery', reminders: 'Reminders', settings: 'Settings', mydash: 'My Dashboard',
+    gallery: 'Gym Gallery', reminders: 'Reminders', payments: 'Payments', settings: 'Settings', mydash: 'My Dashboard',
     myattendance: 'My Attendance', myprofile: 'My Profile' };
 
   /* ---------------- attendance ---------------- */
@@ -428,6 +432,59 @@ export default function Dashboard() {
     });
   }
 
+  /* ---------- online payment (Razorpay) ---------- */
+  async function payOnline(plan) {
+    const ok = await loadRazorpay();
+    if (!ok) return toast('Could not load the payment window. Check your connection.', 'err');
+    let data;
+    try {
+      const res = await fetch('/api/pay/order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: plan.id }) });
+      data = await res.json();
+      if (!res.ok) return toast(data.error || 'Could not start payment', 'err');
+    } catch { return toast('Could not start payment', 'err'); }
+
+    const rzp = new window.Razorpay({
+      key: data.keyId, order_id: data.orderId, amount: data.amount, currency: data.currency,
+      name: settings.gym_name || 'BAJRANG GYM', description: data.planName + ' membership',
+      image: settings.logo || undefined,
+      prefill: { email: curMember?.email || myEmail || '', contact: curMember?.phone || '' },
+      theme: { color: '#ff4d12' },
+      handler: async (resp) => {
+        try {
+          const v = await fetch('/api/pay/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...resp, planId: plan.id }) });
+          const vd = await v.json();
+          if (v.ok) {
+            toast('Payment successful! Membership extended ✔', 'ok');
+            closeModal();
+            await loadAll();
+            try { const sess = await api.initSession(); setMe(sess?.member || null); } catch {}
+          } else { toast(vd.error || 'Payment verification failed', 'err'); }
+        } catch { toast('Verification error — contact the gym if money was deducted.', 'err'); }
+      },
+    });
+    rzp.open();
+  }
+  function openPayModal() {
+    if (!plans.length) return toast('No plans available to pay for', 'err');
+    setModal({
+      title: 'Pay / Renew Membership', wide: true, node: (
+        <>
+          <p className="muted" style={{ marginBottom: 16 }}>Choose a plan and pay securely (UPI / card / netbanking). Your membership extends instantly on success.</p>
+          <div className="plan-grid">
+            {plans.map((p) => (
+              <div className="plan-card" key={p.id}>{p.popular && <div className="plan-ribbon">POPULAR</div>}
+                <div className="pc-name">{p.name}</div>
+                <div className="pc-price">{money(p.price)}<small> / {p.months} mo</small></div>
+                <div className="pc-desc">{p.descr || ''}</div>
+                <button className="btn btn-primary btn-block" onClick={() => payOnline(p)}>💳 Pay {money(p.price)}</button>
+              </div>
+            ))}
+          </div>
+        </>
+      ),
+    });
+  }
+
   /* ===================== VIEWS ===================== */
   function renderView() {
     switch (view) {
@@ -437,6 +494,7 @@ export default function Dashboard() {
       case 'plans': return plansView();
       case 'gallery': return galleryView();
       case 'reminders': return remindersView();
+      case 'payments': return paymentsView();
       case 'settings': return settingsView();
       case 'mydash': return myDash();
       case 'myattendance': return myAttendance();
@@ -740,6 +798,32 @@ export default function Dashboard() {
     );
   }
 
+  function paymentsView() {
+    const total = payments.reduce((s, p) => s + Number(p.amount || 0), 0);
+    const month = todayISO().slice(0, 7);
+    const monthTotal = payments.filter((p) => (p.created_at || '').startsWith(month)).reduce((s, p) => s + Number(p.amount || 0), 0);
+    const nameOf = (p) => members.find((m) => m.id === p.member_id)?.name || '—';
+    return (
+      <>
+        <div className="stats-grid">
+          <Stat cls="green" ic="💰" val={money(total)} lbl="Collected Online" />
+          <Stat cls="accent" ic="📅" val={money(monthTotal)} lbl="This Month" />
+          <Stat cls="blue" ic="🧾" val={payments.length} lbl="Transactions" />
+        </div>
+        <div className="panel">
+          <div className="panel-head"><div><span className="kicker">Razorpay</span><h2>Online Payments</h2></div></div>
+          {payments.length ? (
+            <table className="tbl"><thead><tr><th>Date</th><th>Member</th><th>Plan</th><th>Amount</th><th>Payment ID</th></tr></thead>
+              <tbody>{payments.map((p) => (
+                <tr key={p.id}><td>{fmtDate(p.created_at)}</td><td>{nameOf(p)}</td><td>{p.plan_name || '—'}</td>
+                  <td><b>{money(p.amount)}</b></td><td className="muted" style={{ fontSize: 12 }}>{p.razorpay_payment_id || '—'}</td></tr>
+              ))}</tbody></table>
+          ) : <Empty ic="💳" h="No payments yet" p="Online payments by members will appear here automatically." />}
+        </div>
+      </>
+    );
+  }
+
   /* ---------- member self-service ---------- */
   function myDash() {
     const m = curMember;
@@ -757,8 +841,10 @@ export default function Dashboard() {
         <div className="hero">
           <div className="hero-user"><Avatar m={m} lg /><div><div className="kicker">Welcome 💪</div>
             <h2 className="hero-title">{m.name}</h2><div style={{ marginTop: 6 }}><Badge s={s} /></div></div></div>
-          <div className="hero-cta">{checkedToday ? <span className="badge active" style={{ padding: '10px 16px' }}>✅ Checked in today</span>
-            : <button className="btn btn-green" onClick={() => checkIn(m.id)}>📋 Check In Now</button>}</div>
+          <div className="hero-cta">
+            <button className="btn btn-primary" onClick={openPayModal}>💳 Pay / Renew Online</button>
+            {checkedToday ? <span className="badge active" style={{ padding: '10px 16px' }}>✅ Checked in today</span>
+              : <button className="btn btn-green" onClick={() => checkIn(m.id)}>📋 Check In Now</button>}</div>
         </div>
         <div className="stats-grid">
           <Stat cls={s === 'expired' ? 'red' : 'green'} ic="🎫" val={s === 'expired' ? 'Expired' : dl + ' days'} lbl={s === 'expired' ? 'Membership' : 'Days Remaining'} />
@@ -820,6 +906,7 @@ export default function Dashboard() {
     const s = statusOf(m);
     const plan = plans.find((p) => p.id === m.plan_id);
     const visits = attendance.filter((a) => a.member_id === m.id).length;
+    const myPays = payments.filter((p) => p.member_id === m.id);
     const di = (k, v) => <div className="di"><div className="k">{k}</div><div className="v">{v}</div></div>;
     return (
       <div style={{ maxWidth: 760 }}>
@@ -847,7 +934,8 @@ export default function Dashboard() {
               <p style={{ marginTop: 6, lineHeight: 1.6 }}>{plan.descr}</p>
             </div>
           )}
-          {s !== 'active' && <p className="muted" style={{ marginTop: 14 }}>⚠️ Your membership {s === 'expired' ? 'has expired' : 'is expiring soon'}. Please contact the gym to renew.</p>}
+          {s !== 'active' && <p className="muted" style={{ marginTop: 14 }}>⚠️ Your membership {s === 'expired' ? 'has expired' : 'is expiring soon'}.</p>}
+          <div style={{ marginTop: 14 }}><button className="btn btn-primary" onClick={openPayModal}>💳 Pay / Renew Online</button></div>
         </div>
 
         <div className="panel">
@@ -864,6 +952,16 @@ export default function Dashboard() {
           </div>
           <p className="muted" style={{ marginTop: 14, fontSize: 13 }}>To update your name, phone or plan, contact the gym front desk.</p>
         </div>
+
+        {myPays.length > 0 && (
+          <div className="panel">
+            <div className="panel-head"><div><span className="kicker">Receipts</span><h2>My Payment History</h2></div></div>
+            <table className="tbl"><thead><tr><th>Date</th><th>Plan</th><th>Amount</th></tr></thead>
+              <tbody>{myPays.map((p) => (
+                <tr key={p.id}><td>{fmtDate(p.created_at)}</td><td>{p.plan_name || '—'}</td><td><b>{money(p.amount)}</b></td></tr>
+              ))}</tbody></table>
+          </div>
+        )}
       </div>
     );
   }

@@ -71,6 +71,20 @@ create table if not exists settings (
   message_template text default ''
 );
 
+create table if not exists payments (
+  id        uuid primary key default gen_random_uuid(),
+  member_id uuid references members(id) on delete set null,
+  user_id   uuid,
+  plan_id   uuid references plans(id) on delete set null,
+  plan_name text,
+  amount    numeric default 0,
+  currency  text default 'INR',
+  razorpay_order_id   text,
+  razorpay_payment_id text,
+  status    text default 'paid',
+  created_at timestamptz default now()
+);
+
 -- ---------- helper: is current user the owner? ----------
 create or replace function is_owner()
 returns boolean language sql security definer stable set search_path = public as $$
@@ -158,6 +172,11 @@ drop policy if exists p_set_sel on settings;
 create policy p_set_sel on settings for select using (auth.uid() is not null);
 drop policy if exists p_set_all on settings;
 create policy p_set_all on settings for all using (is_owner()) with check (is_owner());
+
+-- payments: owner sees all, member sees own. Inserts happen via service role (server) only.
+alter table payments enable row level security;
+drop policy if exists p_pay_sel on payments;
+create policy p_pay_sel on payments for select using (is_owner() or user_id = auth.uid());
 
 -- ---------- seed data ----------
 insert into settings (id) values (1) on conflict (id) do nothing;
