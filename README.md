@@ -53,12 +53,21 @@ Open <http://localhost:3000>.
 
 ---
 
-## 🚀 Deploy free on Vercel
-1. Push this `bajrang-next` folder to a GitHub repo.
-2. Go to <https://vercel.com> → **Add New Project** → import the repo.
-3. If the repo root contains this folder, set **Root Directory** = `bajrang-next`.
-4. Add the two environment variables (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`).
-5. **Deploy.** Then add your `https://your-app.vercel.app/**` URL to Supabase **Redirect URLs** (step 3) and to Google's authorized redirect (if using Gmail).
+## 🚀 Deploy free — option A: Render (uses `render.yaml`)
+1. Go to <https://render.com> → sign in **with GitHub**.
+2. **New + → Blueprint** → pick the `bajrang-gym` repo. Render reads `render.yaml` automatically
+   (web service, Node, build = `npm install && npm run build`, start = `npm start`).
+3. When prompted, paste the two env vars: `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+4. **Apply / Create.** After the build you get a public URL like `https://bajrang-gym.onrender.com`.
+5. Add `https://bajrang-gym.onrender.com/**` to Supabase **Authentication → URL Configuration → Redirect URLs**
+   (and to your Google OAuth client's redirects if using Gmail).
+
+> Render's free web service **sleeps after ~15 min idle**, so the first visit after a pause takes ~30–60s to wake. Fine for a gym; upgrade to a paid instance to keep it always-on.
+
+## 🚀 Deploy free — option B: Vercel
+1. Go to <https://vercel.com> → **Add New Project** → import the `bajrang-gym` repo.
+2. Add the two environment variables (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`).
+3. **Deploy.** Then add your `https://your-app.vercel.app/**` URL to Supabase **Redirect URLs** and to Google's authorized redirect (if using Gmail).
 
 ---
 

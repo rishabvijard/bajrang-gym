@@ -1,0 +1,19 @@
+# Render Blueprint — deploys BAJRANG GYM (Next.js) as a free web service.
+# Render auto-detects this file when you create a "Blueprint" from the repo.
+services:
+  - type: web
+    name: bajrang-gym
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /login
+    autoDeploy: true
+    envVars:
+      # You'll be prompted to paste these in the Render dashboard (not stored in git).
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: NODE_VERSION
+        value: "20"
