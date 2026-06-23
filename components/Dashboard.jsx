@@ -769,16 +769,50 @@ export default function Dashboard() {
     const m = curMember;
     if (!m) return <div className="panel"><Empty ic="🙋" h="No membership linked" p="Ask the gym to register you." /></div>;
     const age = m.dob ? Math.floor(daysBetween(m.dob, todayISO()) / 365.25) + ' yrs' : '—';
+    const dl = daysLeft(m);
+    const s = statusOf(m);
+    const plan = plans.find((p) => p.id === m.plan_id);
+    const visits = attendance.filter((a) => a.member_id === m.id).length;
     const di = (k, v) => <div className="di"><div className="k">{k}</div><div className="v">{v}</div></div>;
     return (
-      <div className="panel" style={{ maxWidth: 720 }}>
-        <div className="detail-head"><Avatar m={m} lg /><div><div className="dh-name">{m.name}</div>
-          <div className="dh-sub">{m.phone} {m.email ? '• ' + m.email : ''}</div><div style={{ marginTop: 8 }}><Badge s={statusOf(m)} /></div></div></div>
-        <div className="detail-list">
-          {di('Phone', m.phone || '—')}{di('Email', m.email || '—')}{di('Gender', m.gender || '—')}{di('Age', age)}
-          {di('DOB', fmtDate(m.dob))}{di('Address', m.address || '—')}{di('Emergency', m.emergency || '—')}{di('Member Since', fmtDate(m.join_date))}
+      <div style={{ maxWidth: 760 }}>
+        <div className="panel">
+          <div className="detail-head"><Avatar m={m} lg /><div><div className="dh-name">{m.name}</div>
+            <div className="dh-sub">{m.phone} {m.email ? '• ' + m.email : ''}</div>
+            <div style={{ marginTop: 8 }}><Badge s={s} /> <span className="muted" style={{ fontSize: 13 }}>• {visits} total visits</span></div></div></div>
+
+          <div className="panel-head" style={{ marginTop: 4 }}><div><span className="kicker">Your Membership</span><h2>Plan &amp; Payment</h2></div></div>
+          <div className="detail-list">
+            {di('Plan', m.plan_name || '—')}
+            {di('Status', STATUS_LABEL[s])}
+            {di('Duration', plan ? plan.months + ' month' + (plan.months > 1 ? 's' : '') : '—')}
+            {di('Plan Price', plan ? money(plan.price) : '—')}
+            {di('Start Date', fmtDate(m.start_date))}
+            {di('Valid Till', fmtDate(m.end_date))}
+            {di('Days Remaining', s === 'expired' ? `Expired ${Math.abs(dl)} days ago` : `${dl} days`)}
+            {di('Fee Paid', money(m.fee_paid))}
+            {di('Payment Status', m.pay_status || '—')}
+            {di('Member Since', fmtDate(m.join_date))}
+          </div>
+          {plan?.descr && (
+            <div style={{ marginTop: 14 }}>
+              <div className="k" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--txt-dim)' }}>Plan Includes</div>
+              <p style={{ marginTop: 6, lineHeight: 1.6 }}>{plan.descr}</p>
+            </div>
+          )}
+          {s !== 'active' && <p className="muted" style={{ marginTop: 14 }}>⚠️ Your membership {s === 'expired' ? 'has expired' : 'is expiring soon'}. Please contact the gym to renew.</p>}
         </div>
-        <p className="muted" style={{ marginTop: 16, fontSize: 13 }}>To update details, contact the gym front desk.</p>
+
+        <div className="panel">
+          <div className="panel-head"><div><span className="kicker">About You</span><h2>Personal Details</h2></div></div>
+          <div className="detail-list">
+            {di('Full Name', m.name)}{di('Phone', m.phone || '—')}
+            {di('Email', m.email || '—')}{di('Gender', m.gender || '—')}
+            {di('Age', age)}{di('Date of Birth', fmtDate(m.dob))}
+            {di('Address', m.address || '—')}{di('Emergency Contact', m.emergency || '—')}
+          </div>
+          <p className="muted" style={{ marginTop: 16, fontSize: 13 }}>To update your details, contact the gym front desk.</p>
+        </div>
       </div>
     );
   }
