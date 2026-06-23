@@ -111,6 +111,18 @@ export default function Dashboard() {
     <div className={`stat ${cls}`}><div className="s-ic">{ic}</div><div className="s-val">{val}</div><div className="s-lbl">{lbl}</div></div>
   );
   const Empty = ({ ic, h, p }) => <div className="empty"><div className="e-ic">{ic}</div><h3>{h}</h3><p>{p}</p></div>;
+  const BarChart = ({ data }) => {
+    const max = Math.max(1, ...data.map((d) => d.value));
+    return (
+      <div className="bars">{data.map((d, i) => (
+        <div className="bar-col" key={i}>
+          <span className="bar-val">{d.display ?? d.value}</span>
+          <div className="bar-track"><div className="bar-fill" style={{ height: Math.round((d.value / max) * 100) + '%' }} /></div>
+          <span className="bar-lbl">{d.label}</span>
+        </div>
+      ))}</div>
+    );
+  };
   const NotLinked = () => (
     <div className="panel"><div className="empty"><div className="e-ic">🙋</div>
       <h3>No membership linked to this account</h3>
@@ -121,12 +133,12 @@ export default function Dashboard() {
 
   const OWNER_NAV = [['dashboard', '📊', 'Dashboard'], ['members', '🧑‍🤝‍🧑', 'Members'], ['attendance', '📋', 'Attendance'],
     ['plans', '🏷️', 'Plans'], ['gallery', '🖼️', 'Gym Gallery'], ['reminders', '🔔', 'Reminders'],
-    ['payments', '💳', 'Payments'], ['settings', '⚙️', 'Settings']];
+    ['payments', '💳', 'Payments'], ['reports', '📈', 'Reports'], ['settings', '⚙️', 'Settings']];
   const MEMBER_NAV = [['mydash', '🏠', 'My Dashboard'], ['myattendance', '📋', 'My Attendance'],
     ['plans', '🏷️', 'Plans'], ['gallery', '🖼️', 'Gym Gallery'], ['myprofile', '👤', 'My Profile']];
   const NAV = role === 'owner' ? OWNER_NAV : MEMBER_NAV;
   const TITLES = { dashboard: 'Dashboard', members: 'Members', attendance: 'Attendance', plans: 'Membership Plans',
-    gallery: 'Gym Gallery', reminders: 'Reminders', payments: 'Payments', settings: 'Settings', mydash: 'My Dashboard',
+    gallery: 'Gym Gallery', reminders: 'Reminders', payments: 'Payments', reports: 'Reports & Analytics', settings: 'Settings', mydash: 'My Dashboard',
     myattendance: 'My Attendance', myprofile: 'My Profile' };
 
   /* ---------------- attendance ---------------- */
@@ -495,6 +507,7 @@ export default function Dashboard() {
       case 'gallery': return galleryView();
       case 'reminders': return remindersView();
       case 'payments': return paymentsView();
+      case 'reports': return reportsView();
       case 'settings': return settingsView();
       case 'mydash': return myDash();
       case 'myattendance': return myAttendance();
@@ -819,6 +832,70 @@ export default function Dashboard() {
                   <td><b>{money(p.amount)}</b></td><td className="muted" style={{ fontSize: 12 }}>{p.razorpay_payment_id || '—'}</td></tr>
               ))}</tbody></table>
           ) : <Empty ic="💳" h="No payments yet" p="Online payments by members will appear here automatically." />}
+        </div>
+      </>
+    );
+  }
+
+  function reportsView() {
+    const compact = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : '' + Math.round(n));
+    // last 6 months
+    const months = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
+      months.push({ key: d.toISOString().slice(0, 7), label: d.toLocaleDateString('en-GB', { month: 'short' }) });
+    }
+    const revData = months.map((m) => {
+      const v = payments.filter((p) => (p.created_at || '').startsWith(m.key)).reduce((s, p) => s + Number(p.amount || 0), 0);
+      return { label: m.label, value: v, display: v ? (settings.currency || '₹') + compact(v) : '0' };
+    });
+    const joinData = months.map((m) => {
+      const v = members.filter((x) => (x.join_date || '').startsWith(m.key)).length;
+      return { label: m.label, value: v };
+    });
+    // peak hours
+    const hourMap = {};
+    attendance.forEach((a) => { const h = (a.time || '').slice(0, 2); if (h) hourMap[h] = (hourMap[h] || 0) + 1; });
+    const hourData = Object.keys(hourMap).sort().map((h) => ({ label: h, value: hourMap[h] }));
+    // weekday (Mon..Sun)
+    const wdNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const wd = [0, 0, 0, 0, 0, 0, 0];
+    attendance.forEach((a) => { const g = new Date(a.date).getDay(); wd[(g + 6) % 7]++; });
+    const wdData = wdNames.map((n, i) => ({ label: n, value: wd[i] }));
+    // KPIs
+    const totalRev = payments.reduce((s, p) => s + Number(p.amount || 0), 0);
+    const feeRev = members.reduce((s, x) => s + Number(x.fee_paid || 0), 0);
+    const active = members.filter((x) => statusOf(x) === 'active').length;
+    const activeRate = members.length ? Math.round((active / members.length) * 100) : 0;
+    const avgVisits = members.length ? (attendance.length / members.length).toFixed(1) : '0';
+
+    return (
+      <>
+        <div className="stats-grid">
+          <Stat cls="green" ic="💰" val={money(totalRev)} lbl="Online Revenue" />
+          <Stat cls="accent" ic="🧾" val={money(feeRev)} lbl="Total Fees Recorded" />
+          <Stat cls="blue" ic="✅" val={activeRate + '%'} lbl="Active Rate" />
+          <Stat cls="amber" ic="📈" val={avgVisits} lbl="Avg Visits / Member" />
+        </div>
+        <div className="section-grid">
+          <div className="panel">
+            <div className="panel-head"><div><span className="kicker">Last 6 months</span><h2>Online Revenue</h2></div></div>
+            {payments.length ? <BarChart data={revData} /> : <Empty ic="💳" h="No payments yet" p="Revenue appears once members pay online." />}
+          </div>
+          <div className="panel">
+            <div className="panel-head"><div><span className="kicker">Last 6 months</span><h2>New Members</h2></div></div>
+            <BarChart data={joinData} />
+          </div>
+        </div>
+        <div className="section-grid">
+          <div className="panel">
+            <div className="panel-head"><div><span className="kicker">Attendance</span><h2>Peak Hours</h2></div></div>
+            {hourData.length ? <BarChart data={hourData} /> : <Empty ic="📋" h="No check-ins yet" p="Peak hours show once members check in." />}
+          </div>
+          <div className="panel">
+            <div className="panel-head"><div><span className="kicker">Attendance</span><h2>Busiest Days</h2></div></div>
+            {attendance.length ? <BarChart data={wdData} /> : <Empty ic="📋" h="No check-ins yet" p="Busiest days show once members check in." />}
+          </div>
         </div>
       </>
     );
