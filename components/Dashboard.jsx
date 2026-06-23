@@ -409,6 +409,38 @@ export default function Dashboard() {
     const todayCount = attendance.filter((a) => a.date === todayISO()).length;
     const recent = [...members].slice(0, 6);
     const attention = [...expiring, ...expired].sort((a, b) => daysLeft(a) - daysLeft(b)).slice(0, 6);
+
+    // weekly check-in activity (last 7 days)
+    const week = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const iso = d.toISOString().slice(0, 10);
+      week.push({ iso, label: d.toLocaleDateString('en-GB', { weekday: 'short' }), count: attendance.filter((a) => a.date === iso).length });
+    }
+    const weekMax = Math.max(1, ...week.map((d) => d.count));
+
+    // membership status distribution
+    const dist = [
+      { name: 'Active', color: '#22c55e', count: active },
+      { name: 'Expiring', color: '#fbbf24', count: expiring.length },
+      { name: 'Expired', color: '#ef4444', count: expired.length },
+      { name: 'Frozen', color: '#60a5fa', count: members.filter((m) => m.frozen).length },
+    ];
+    const distMax = Math.max(1, ...dist.map((d) => d.count));
+
+    // members by plan (donut)
+    const COLORS = ['#ff6a00', '#ffb024', '#3b82f6', '#22c55e', '#a855f7', '#ec4899', '#14b8a6'];
+    const byPlan = plans.map((p, i) => ({ name: p.name, color: COLORS[i % COLORS.length], count: members.filter((m) => m.plan_id === p.id).length }));
+    const noPlan = members.filter((m) => !plans.some((p) => p.id === m.plan_id)).length;
+    if (noPlan) byPlan.push({ name: 'No plan', color: '#64748b', count: noPlan });
+    const planTotal = byPlan.reduce((s, x) => s + x.count, 0);
+    let acc = 0;
+    const segs = byPlan.filter((p) => p.count > 0).map((p) => {
+      const start = (acc / planTotal) * 360; acc += p.count; const end = (acc / planTotal) * 360;
+      return `${p.color} ${start}deg ${end}deg`;
+    }).join(', ');
+    const donutBg = planTotal ? `conic-gradient(${segs})` : 'conic-gradient(#26303f 0deg 360deg)';
+
     return (
       <>
         <div className="hero">
@@ -427,6 +459,44 @@ export default function Dashboard() {
           <Stat cls="blue" ic="📋" val={todayCount} lbl="Check-ins Today" />
           <Stat cls="accent" ic="💰" val={money(revenue)} lbl="Total Revenue" />
         </div>
+
+        <div className="section-grid">
+          <div className="panel">
+            <div className="panel-head"><div><span className="kicker">Last 7 days</span><h2>Check-in Activity</h2></div>
+              <span className="badge active">{week.reduce((s, d) => s + d.count, 0)} total</span></div>
+            <div className="bars">{week.map((d) => (
+              <div className={`bar-col ${d.iso === todayISO() ? 'today' : ''}`} key={d.iso}>
+                <span className="bar-val">{d.count}</span>
+                <div className="bar-track"><div className="bar-fill" style={{ height: Math.round((d.count / weekMax) * 100) + '%' }} /></div>
+                <span className="bar-lbl">{d.label}</span>
+              </div>
+            ))}</div>
+          </div>
+          <div className="panel">
+            <div className="panel-head"><div><span className="kicker">Distribution</span><h2>Members by Plan</h2></div></div>
+            <div className="donut-wrap">
+              <div className="donut" style={{ background: donutBg }}>
+                <div className="donut-hole"><b>{members.length}</b><span>Members</span></div>
+              </div>
+              <div className="legend">{byPlan.filter((p) => p.count > 0).map((p) => (
+                <div className="legend-row" key={p.name}><span className="legend-dot" style={{ background: p.color }} />
+                  {p.name}<b>{p.count}</b></div>
+              ))}{planTotal === 0 && <div className="muted" style={{ textAlign: 'center' }}>No members yet</div>}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-head"><div><span className="kicker">Health</span><h2>Membership Status</h2></div></div>
+          <div className="dist">{dist.map((d) => (
+            <div className="dist-row" key={d.name}>
+              <span className="dist-name"><span className="dist-dot" style={{ background: d.color }} />{d.name}</span>
+              <div className="dist-bar"><i style={{ width: Math.round((d.count / distMax) * 100) + '%', background: d.color }} /></div>
+              <b>{d.count}</b>
+            </div>
+          ))}</div>
+        </div>
+
         <div className="section-grid">
           <div className="panel">
             <div className="panel-head"><h2>Recent Members</h2><button className="btn btn-ghost btn-sm" onClick={() => setView('members')}>View all →</button></div>
